@@ -10,7 +10,7 @@ local function resetSettings()
 	for i = 1, #server.tools do
 		local tool = server.tools[i]
 		server.settings.loadout[tool.id] = {enabled = tool.startEnabled, ammo = tool.ammo or 0}
-		server.settings.lootWeights[tool.id] = tool.canLoot and 1 or 0
+		server.settings.lootWeights[tool.id] = tool.canLoot and CDMP.Clamp(tool.lootWeight or 0, 0, 10) or 0
 	end
 end
 

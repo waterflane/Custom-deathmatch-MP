@@ -15,15 +15,42 @@ function CDMP.CollectToolCatalog()
 			table.insert(ids, tool.id)
 		end
 	end
+
+	local keys = ListKeys("game.tool")
+	local available = {}
+	for i = 1, #keys do
+		available[keys[i]] = true
+	end
+
 	for i = 1, #CDMP.VANILLA_TOOLS do
 		local base = CDMP.VANILLA_TOOLS[i]
-		add({id = base.id, label = CDMP.ReadToolName(base.id, base.label), ammo = base.ammo, usesAmmo = base.id ~= "sledge", canLoot = base.canLoot, startEnabled = base.startEnabled == true, vanilla = true})
+		if available[base.id] then
+			add({
+				id = base.id,
+				label = CDMP.ReadToolName(base.id, base.label),
+				ammo = base.ammo or 0,
+				usesAmmo = base.id ~= "sledge",
+				canLoot = base.canLoot == true,
+				lootWeight = base.lootWeight or 0,
+				startEnabled = base.startEnabled == true,
+				vanilla = true,
+			})
+		end
 	end
-	local keys = ListKeys("game.tool")
+
 	for i = 1, #keys do
 		local id = keys[i]
 		if id ~= "" and not byId[id] then
-			add({id = id, label = CDMP.ReadToolName(id, id), ammo = 10, usesAmmo = true, canLoot = true, startEnabled = false, vanilla = false})
+			add({
+				id = id,
+				label = CDMP.ReadToolName(id, id),
+				ammo = CDMP.DEFAULT_MOD_TOOL_AMMO or 10,
+				usesAmmo = true,
+				canLoot = true,
+				lootWeight = CDMP.DEFAULT_MOD_TOOL_LOOT_WEIGHT or 1,
+				startEnabled = false,
+				vanilla = false,
+			})
 		end
 	end
 	return list, byId, ids
