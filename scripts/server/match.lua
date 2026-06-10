@@ -137,7 +137,8 @@ local function buildOfficialLootTable()
 		if tool.canLoot then
 			local weight = CDMP.Clamp(server.settings.lootWeights[tool.id] or 0, 0, 10)
 			if weight > 0 then
-				local amount = GetToolAmmoPickupAmount(tool.id)
+				local amount = tool.pickupAmount
+				if amount == nil then amount = GetToolAmmoPickupAmount(tool.id) end
 				if amount == nil or amount <= 0 then amount = tool.ammo or 20 end
 				if amount <= 0 then amount = 20 end
 				lootTable[#lootTable + 1] = {name = tool.id, weight = weight, amount = amount}

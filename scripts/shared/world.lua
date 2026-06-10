@@ -24,18 +24,18 @@ function CDMP.CollectToolCatalog()
 
 	for i = 1, #CDMP.VANILLA_TOOLS do
 		local base = CDMP.VANILLA_TOOLS[i]
-		if available[base.id] then
-			add({
-				id = base.id,
-				label = CDMP.ReadToolName(base.id, base.label),
-				ammo = base.ammo or 0,
-				usesAmmo = base.id ~= "sledge",
-				canLoot = base.canLoot == true,
-				lootWeight = base.lootWeight or 0,
-				startEnabled = base.startEnabled == true,
-				vanilla = true,
-			})
-		end
+		add({
+			id = base.id,
+			label = CDMP.ReadToolName(base.id, base.label),
+			ammo = base.ammo or 0,
+			usesAmmo = base.id ~= "sledge",
+			canLoot = base.canLoot == true,
+			lootWeight = base.lootWeight or 0,
+			pickupAmount = base.pickupAmount,
+			startEnabled = base.startEnabled == true,
+			vanilla = true,
+			available = available[base.id] == true,
+		})
 	end
 
 	for i = 1, #keys do
@@ -44,12 +44,14 @@ function CDMP.CollectToolCatalog()
 			add({
 				id = id,
 				label = CDMP.ReadToolName(id, id),
-				ammo = CDMP.DEFAULT_MOD_TOOL_AMMO or 10,
+				ammo = CDMP.DEFAULT_UNLISTED_TOOL_AMMO or 10,
 				usesAmmo = true,
-				canLoot = true,
-				lootWeight = CDMP.DEFAULT_MOD_TOOL_LOOT_WEIGHT or 1,
-				startEnabled = false,
+				canLoot = CDMP.DEFAULT_UNLISTED_TOOL_CAN_LOOT == true,
+				lootWeight = CDMP.DEFAULT_UNLISTED_TOOL_LOOT_WEIGHT or 1,
+				pickupAmount = CDMP.DEFAULT_UNLISTED_TOOL_PICKUP_AMOUNT,
+				startEnabled = CDMP.DEFAULT_UNLISTED_TOOL_START_ENABLED == true,
 				vanilla = false,
+				available = true,
 			})
 		end
 	end

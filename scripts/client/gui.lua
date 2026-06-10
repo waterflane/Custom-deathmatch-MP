@@ -77,6 +77,10 @@ local function toolLabel(tool)
 	return tool.id
 end
 
+local function toolSettingId(tool)
+	return string.gsub(tool.id or "tool", "[^%w_]", "_")
+end
+
 local function getLoadout(st, tool)
 	local settings = st.settings or {}
 	local loadout = settings.loadout or {}
@@ -104,8 +108,8 @@ local function makeLoadoutItems(st)
 		local loadout = getLoadout(st, tool)
 		local enabledDefault = loadout.enabled and 1 or 0
 		local ammoDefault = CDMP.Clamp(loadout.ammo or tool.ammo or 0, 0, 100)
-		items[#items + 1] = {key = key("loadout." .. i .. ".enabled"), label = toolLabel(tool), info = "Start with this tool", options = onOffOptions(), default = enabledDefault, tool = tool}
-		items[#items + 1] = {key = key("loadout." .. i .. ".ammo"), label = toolLabel(tool) .. " ammo", info = "Starting ammo, 0-100", options = ammoOptions(), default = ammoDefault, tool = tool}
+		items[#items + 1] = {key = key("loadout." .. toolSettingId(tool) .. ".enabled"), label = toolLabel(tool), info = "Start with this tool", options = onOffOptions(), default = enabledDefault, tool = tool}
+		items[#items + 1] = {key = key("loadout." .. toolSettingId(tool) .. ".ammo"), label = toolLabel(tool) .. " ammo", info = "Starting ammo, 0-100", options = ammoOptions(), default = ammoDefault, tool = tool}
 	end
 	return items
 end
@@ -117,7 +121,7 @@ local function makeLootItems(st)
 		local tool = tools[i]
 		if tool.canLoot then
 			local defaultWeight = CDMP.Clamp(getLootWeight(st, tool), 0, 10)
-			items[#items + 1] = {key = key("loot." .. i), label = toolLabel(tool), info = "Loot crate spawn weight, 0-10", options = weightOptions(), default = defaultWeight, tool = tool}
+			items[#items + 1] = {key = key("loot." .. toolSettingId(tool)), label = toolLabel(tool), info = "Loot crate spawn weight, 0-10", options = weightOptions(), default = defaultWeight, tool = tool}
 		end
 	end
 	return items
@@ -134,9 +138,14 @@ local function initializeAllSettings(st)
 	for i = 1, #sections do
 		for j = 1, #sections[i] do
 			local item = sections[i][j]
-			ensureStepperValue(item.key, item.options, item.default)
+			if client.cdmpSettingsSeeded then
+				ensureStepperValue(item.key, item.options, item.default)
+			else
+				resetStepperValue(item.key, item.options, item.default)
+			end
 		end
 	end
+	client.cdmpSettingsSeeded = true
 end
 
 local function resetItems(items)
@@ -152,8 +161,8 @@ local function encodeLoadoutSettings(st)
 	for i = 1, #tools do
 		local tool = tools[i]
 		local loadout = getLoadout(st, tool)
-		local enabled = readNumber(key("loadout." .. i .. ".enabled"), loadout.enabled and 1 or 0)
-		local ammo = readNumber(key("loadout." .. i .. ".ammo"), loadout.ammo or tool.ammo or 0)
+		local enabled = readNumber(key("loadout." .. toolSettingId(tool) .. ".enabled"), loadout.enabled and 1 or 0)
+		local ammo = readNumber(key("loadout." .. toolSettingId(tool) .. ".ammo"), loadout.ammo or tool.ammo or 0)
 		parts[#parts + 1] = tool.id .. ":" .. tostring(CDMP.Clamp(enabled, 0, 1)) .. ":" .. tostring(CDMP.Clamp(ammo, 0, 100))
 	end
 	return table.concat(parts, ";")
@@ -165,7 +174,7 @@ local function encodeLootSettings(st)
 	for i = 1, #tools do
 		local tool = tools[i]
 		if tool.canLoot then
-			local weight = readNumber(key("loot." .. i), getLootWeight(st, tool))
+			local weight = readNumber(key("loot." .. toolSettingId(tool)), getLootWeight(st, tool))
 			parts[#parts + 1] = tool.id .. ":" .. tostring(CDMP.Clamp(weight, 0, 10))
 		end
 	end
@@ -373,6 +382,7 @@ function CDMP_GuiInit()
 	client.cdmpSettingsVisible = false
 	client.cdmpSettingsSection = 1
 	client.cdmpSettingsPage = 1
+	client.cdmpSettingsSeeded = false
 end
 
 function CDMP_ClientTick(dt)
