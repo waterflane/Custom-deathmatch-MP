@@ -1,10 +1,10 @@
 name = Custom Deathmatch MP
 en_name = Custom Deathmatch MP
 ru_name = Custom Deathmatch MP
-author = water
+author = WaterFlane
 description = Clean multiplayer deathmatch with host settings for match time, starting items, loot spawn weights, and headshot damage.
 en_description = Clean multiplayer deathmatch with host settings for match time, starting items, loot spawn weights, and headshot damage.
-ru_description = Clean multiplayer deathmatch with host settings for match time, starting items, loot spawn weights, and headshot damage.
+ru_description = Чистый многопользовательский режим Deathmatch с настройками хоста, позволяющими задать время матча, стартовые предметы, вес точек появления добычи и урон от попадания в голову.
 tags = GameMode
 multiplayer = true
 version = 2
