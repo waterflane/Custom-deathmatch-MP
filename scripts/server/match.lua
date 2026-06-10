@@ -183,23 +183,43 @@ local function endMatch()
 	sync()
 end
 
+local function isKnownPlayer(playerId)
+	return playerId ~= nil and server.players[playerId] ~= nil
+end
+
+local function isRealPlayerHit(playerId, attackerId, healthBefore, healthAfter, point)
+	if not isKnownPlayer(playerId) then return false end
+	if not isKnownPlayer(attackerId) then return false end
+	if attackerId == playerId then return false end
+	if point == nil then return false end
+	return ((healthBefore or 0) - (healthAfter or 0)) > 0
+end
+
+local function getHeadshotBonusDamage(baseDamage)
+	local multiplier = shared.multiplyheadshot or 1.5
+	if multiplier < 1.0 then multiplier = 1.0 end
+	local bonusPercent = multiplier - 1.0
+	return baseDamage * bonusPercent
+end
+
 local function isHeadshot(playerId, point)
-	if not point then return false end
-	local eye = GetPlayerEyeTransform(playerId)
-	return VecLength(VecSub(point, eye.pos)) <= CDMP.HEAD_RADIUS
+	local center = CDMP.GetHeadshotCenter(playerId)
+	return VecLength(VecSub(point, center)) <= CDMP.HEAD_RADIUS
 end
 
 local function handleHeadshots()
 	if server.ignoreHeadshotDamage then return end
-	local multiplier = shared.multiplyheadshot or 1.5
-	if multiplier <= 1.0 then return end
+	if (shared.multiplyheadshot or 1.0) <= 1.0 then return end
 	for i = 1, GetEventCount("playerhurt") do
 		local playerId, healthBefore, healthAfter, attackerId, point = GetEvent("playerhurt", i)
-		local baseDamage = (healthBefore or 0) - (healthAfter or 0)
-		if attackerId ~= nil and attackerId ~= playerId and baseDamage > 0 and isHeadshot(playerId, point) then
-			server.ignoreHeadshotDamage = true
-			ApplyPlayerDamage(playerId, baseDamage * (multiplier - 1.0), "headshot", attackerId)
-			server.ignoreHeadshotDamage = false
+		if isRealPlayerHit(playerId, attackerId, healthBefore, healthAfter, point) and isHeadshot(playerId, point) then
+			local baseDamage = (healthBefore or 0) - (healthAfter or 0)
+			local bonusDamage = getHeadshotBonusDamage(baseDamage)
+			if bonusDamage > 0 then
+				server.ignoreHeadshotDamage = true
+				ApplyPlayerDamage(playerId, bonusDamage, "headshot", attackerId)
+				server.ignoreHeadshotDamage = false
+			end
 		end
 	end
 end

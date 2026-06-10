@@ -15,7 +15,7 @@ The mod focuses on a small set of host-controlled match settings: match duration
 - Per-tool starting ammo from `0` to `100`
 - Loot crate weights from `0` to `10`
 - Official Multiplayer Classics-style loot crates and interact pickup behavior
-- Configurable headshot damage multiplier
+- Configurable headshot damage multiplier (Thanks for the idea Exorsky(babon))
 - Scoreboard with kills and deaths
 
 ## Installation

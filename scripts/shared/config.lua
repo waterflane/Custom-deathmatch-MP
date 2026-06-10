@@ -5,9 +5,10 @@ CDMP.DEFAULT_WALK_SPEED = 7.0
 CDMP.RESPAWN_DELAY = 4.0
 CDMP.LOOT_RESPAWN_DELAY = 18.0
 CDMP.HEAD_RADIUS = 0.45
+CDMP.HEAD_OFFSET = Vec(0, 0.18, 0)
 
 CDMP.DURATION_OPTIONS = {300, 600, 900, 1200, 1800}
-CDMP.HEADSHOT_OPTIONS = {1.0, 1.25, 1.5, 2.0, 3.0}
+CDMP.HEADSHOT_OPTIONS = {1.0, 1.15, 1.25, 1.3, 1.5, 2.0, 2.5, 3.0}
 
 CDMP.VANILLA_TOOLS = {
 	{id = "sledge", label = "Sledge", ammo = 0, canLoot = false, startEnabled = true},
@@ -36,4 +37,9 @@ end
 
 function CDMP.CopyTransform(t)
 	return Transform(Vec(t.pos[1], t.pos[2], t.pos[3]), Quat(t.rot[1], t.rot[2], t.rot[3], t.rot[4]))
+end
+
+function CDMP.GetHeadshotCenter(playerId)
+	local eye = GetPlayerEyeTransform(playerId)
+	return TransformToParentPoint(eye, CDMP.HEAD_OFFSET)
 end
