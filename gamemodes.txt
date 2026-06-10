@@ -1,0 +1,9 @@
+[customdeathmatchmp]
+name = Custom Deathmatch MP
+en_name = Custom Deathmatch MP
+ru_name = Custom Deathmatch MP
+description = Configurable multiplayer deathmatch with headshot damage, match time, starting items, and weighted loot spawns.
+en_description = Configurable multiplayer deathmatch with headshot damage, match time, starting items, and weighted loot spawns.
+ru_description = Configurable multiplayer deathmatch with headshot damage, match time, starting items, and weighted loot spawns.
+path = cdmp.lua
+preview = preview.jpg

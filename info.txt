@@ -1,0 +1,11 @@
+name = Custom Deathmatch MP
+en_name = Custom Deathmatch MP
+ru_name = Custom Deathmatch MP
+author = water
+description = Clean multiplayer deathmatch with host settings for match time, starting items, loot spawn weights, and headshot damage.
+en_description = Clean multiplayer deathmatch with host settings for match time, starting items, loot spawn weights, and headshot damage.
+ru_description = Clean multiplayer deathmatch with host settings for match time, starting items, loot spawn weights, and headshot damage.
+tags = GameMode
+multiplayer = true
+version = 2
+preview = preview.jpg

@@ -1,0 +1,39 @@
+# Teardown / Steam Workshop local state
+id.txt
+publishedfileid.txt
+*.workshop
+
+# Logs and crash dumps
+*.log
+*.dmp
+crashdump*
+
+# Temporary and backup files
+*.tmp
+*.temp
+*.bak
+*.old
+*.orig
+*~
+
+# Local archives/build exports
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Local Codex/agent scratch data
+.codex/
+.agents/
+
+# Script/cache artifacts
+__pycache__/
+*.pyc
