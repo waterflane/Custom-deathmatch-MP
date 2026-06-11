@@ -1,8 +1,15 @@
 CDMP = CDMP or {}
 
-CDMP.VERSION = 2
+CDMP.VERSION = 3
 CDMP.DEFAULT_WALK_SPEED = 7.0
 CDMP.RESPAWN_DELAY = 4.0
+CDMP.COUNTDOWN_TIME = 5.0
+CDMP.HITMARKER_TIME = 0.35
+CDMP.KILLMARKER_TIME = 0.65
+CDMP.DAMAGE_NUMBER_TIME = 0.85
+CDMP.RESULTS_SCOREBOARD_DELAY = 2.0
+CDMP.RESULTS_SCOREBOARD_FADE = 0.35
+CDMP.KILLFEED_MAX = 6
 CDMP.LOOT_RESPAWN_DELAY = 18.0
 CDMP.HEAD_RADIUS = 0.45
 CDMP.HEAD_OFFSET = Vec(0, 0.18, 0)
@@ -21,7 +28,7 @@ CDMP.VANILLA_TOOLS = {
 	{id = "spraycan", label = "Spraycan", ammo = 0, pickupAmount = 0, canLoot = false, lootWeight = 0, startEnabled = true},
 	{id = "extinguisher", label = "Extinguisher", ammo = 0, pickupAmount = 0, canLoot = false, lootWeight = 0, startEnabled = true},
 
-	{id = "leafblower", label = "Leafblower", ammo = 0, pickupAmount = 0, canLoot = true, lootWeight = 0, startEnabled = false},
+	{id = "leafblower", label = "Leafblower", ammo = 0, pickupAmount = 0, canLoot = false, lootWeight = 0, startEnabled = false},
 	{id = "blowtorch", label = "Blowtorch", ammo = 10, pickupAmount = 20, canLoot = true, lootWeight = 0, startEnabled = false},
 
 	{id = "cable", label = "Cable", ammo = 6, pickupAmount = 4, canLoot = true, lootWeight = 0, startEnabled = false},
@@ -64,3 +71,4 @@ function CDMP.GetHeadshotCenter(playerId)
 	local eye = GetPlayerEyeTransform(playerId)
 	return TransformToParentPoint(eye, CDMP.HEAD_OFFSET)
 end
+

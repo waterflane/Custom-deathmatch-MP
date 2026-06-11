@@ -6,11 +6,12 @@ local function resetScores()
 end
 
 local function resetSettings()
-	server.settings = {loadout = {}, lootWeights = {}, durationIdx = 2, headshotIdx = 3}
+	server.settings = {loadout = {}, lootWeights = {}, toolOptions = {}, durationIdx = 2, headshotIdx = 3}
 	for i = 1, #server.tools do
 		local tool = server.tools[i]
 		server.settings.loadout[tool.id] = {enabled = tool.startEnabled, ammo = tool.ammo or 0}
 		server.settings.lootWeights[tool.id] = tool.canLoot and CDMP.Clamp(tool.lootWeight or 0, 0, 10) or 0
+		server.settings.toolOptions[tool.id] = {canLoot = tool.canLoot == true, pickupAmount = CDMP.Clamp(tool.pickupAmount or tool.ammo or 0, 0, 100)}
 	end
 end
 
@@ -27,6 +28,10 @@ local function sync()
 		players = server.players,
 		ready = server.ready,
 		scores = server.scores,
+		countdown = server.countdown or 0,
+		dead = server.dead,
+		hitEvents = server.hitEvents,
+		killfeed = server.killfeed,
 		durationOptions = CDMP.DURATION_OPTIONS,
 		headshotOptions = CDMP.HEADSHOT_OPTIONS,
 	}
@@ -74,7 +79,8 @@ local function applyLoadout(playerId)
 end
 
 local function spawnPlayer(playerId)
-	local index = GetRandomInt(1, #server.playerSpawns)
+	server.spawnCursor = (server.spawnCursor or 0) + 1
+	local index = ((server.spawnCursor - 1) % #server.playerSpawns) + 1
 	RespawnPlayerAtTransform(CDMP.CopyTransform(server.playerSpawns[index]), playerId)
 	SetPlayerHealth(1.0, playerId)
 	SetPlayerWalkingSpeed(CDMP.DEFAULT_WALK_SPEED, playerId)
@@ -85,6 +91,18 @@ end
 local function stripLobbyPlayer(playerId)
 	SetPlayerWalkingSpeed(0.0, playerId)
 	disableAllTools(playerId)
+	if DisablePlayerDamage then DisablePlayerDamage(playerId) end
+	if DisablePlayerInput then DisablePlayerInput(playerId) end
+	if DisablePlayer then DisablePlayer(playerId) end
+end
+
+local function spawnFrozenPlayer(playerId)
+	server.spawnCursor = (server.spawnCursor or 0) + 1
+	local index = ((server.spawnCursor - 1) % #server.playerSpawns) + 1
+	RespawnPlayerAtTransform(CDMP.CopyTransform(server.playerSpawns[index]), playerId)
+	SetPlayerHealth(1.0, playerId)
+	stripLobbyPlayer(playerId)
+	server.dead[playerId] = nil
 end
 
 local function addPlayer(playerId)
@@ -94,6 +112,9 @@ local function addPlayer(playerId)
 	if server.state == "playing" then
 		server.ready[playerId] = true
 		spawnPlayer(playerId)
+	elseif server.state == "countdown" then
+		server.ready[playerId] = true
+		spawnFrozenPlayer(playerId)
 	else
 		stripLobbyPlayer(playerId)
 	end
@@ -134,10 +155,11 @@ local function buildOfficialLootTable()
 	local lootTable = {}
 	for i = 1, #server.tools do
 		local tool = server.tools[i]
-		if tool.canLoot then
+		local toolOptions = server.settings.toolOptions[tool.id] or {}
+		if toolOptions.canLoot == true then
 			local weight = CDMP.Clamp(server.settings.lootWeights[tool.id] or 0, 0, 10)
 			if weight > 0 then
-				local amount = tool.pickupAmount
+				local amount = toolOptions.pickupAmount or tool.pickupAmount
 				if amount == nil then amount = GetToolAmmoPickupAmount(tool.id) end
 				if amount == nil or amount <= 0 then amount = tool.ammo or 20 end
 				if amount <= 0 then amount = 20 end
@@ -162,16 +184,33 @@ local function setupOfficialLoot()
 	end
 end
 
-local function startMatch()
+local function startPlaying()
 	server.state = "playing"
+	server.countdown = 0
 	server.timer = CDMP.DURATION_OPTIONS[server.settings.durationIdx] or CDMP.DURATION_OPTIONS[2]
-	server.dead = {}
-	resetScores()
 	setupOfficialLoot()
 	local ids = playerIds()
 	for i = 1, #ids do
 		server.ready[ids[i]] = true
-		spawnPlayer(ids[i])
+		SetPlayerHealth(1.0, ids[i])
+		SetPlayerWalkingSpeed(CDMP.DEFAULT_WALK_SPEED, ids[i])
+		applyLoadout(ids[i])
+	end
+	sync()
+end
+
+local function startMatch()
+	server.state = "countdown"
+	server.countdown = CDMP.COUNTDOWN_TIME
+	server.timer = CDMP.DURATION_OPTIONS[server.settings.durationIdx] or CDMP.DURATION_OPTIONS[2]
+	server.dead = {}
+	server.spawnCursor = GetRandomInt(1, math.max(1, #server.playerSpawns))
+	resetScores()
+	cleanupOfficialLoot()
+	local ids = playerIds()
+	for i = 1, #ids do
+		server.ready[ids[i]] = true
+		spawnFrozenPlayer(ids[i])
 	end
 	sync()
 end
@@ -180,7 +219,7 @@ local function endMatch()
 	server.state = "ended"
 	cleanupOfficialLoot()
 	local ids = playerIds()
-	for i = 1, #ids do SetPlayerWalkingSpeed(0.0, ids[i]) end
+	for i = 1, #ids do stripLobbyPlayer(ids[i]) end
 	sync()
 end
 
@@ -208,24 +247,80 @@ local function isHeadshot(playerId, point)
 	return VecLength(VecSub(point, center)) <= CDMP.HEAD_RADIUS
 end
 
+local function pushHitMarker(playerId, kind, damage, headshot, point, victimId)
+	if not isKnownPlayer(playerId) then return end
+	server.hitSeq = (server.hitSeq or 0) + 1
+	server.hitEvents = server.hitEvents or {}
+	local hitPoint = nil
+	if point ~= nil then
+		hitPoint = {point[1], point[2], point[3]}
+	end
+	server.hitEvents[#server.hitEvents + 1] = {
+		seq = server.hitSeq,
+		player = playerId,
+		victim = victimId,
+		kind = kind or "hit",
+		time = kind == "kill" and CDMP.KILLMARKER_TIME or CDMP.HITMARKER_TIME,
+		numberTime = damage and CDMP.DAMAGE_NUMBER_TIME or 0,
+		damage = damage,
+		headshot = headshot == true,
+		point = hitPoint,
+	}
+	while #server.hitEvents > 24 do table.remove(server.hitEvents, 1) end
+end
+
+local function pushKillfeed(victimId, attackerId)
+	if not isKnownPlayer(victimId) then return end
+	local suicide = attackerId == nil or attackerId == victimId or not isKnownPlayer(attackerId)
+	server.killfeedSeq = (server.killfeedSeq or 0) + 1
+	server.killfeed = server.killfeed or {}
+	server.killfeed[#server.killfeed + 1] = {
+		seq = server.killfeedSeq,
+		victim = victimId,
+		attacker = suicide and nil or attackerId,
+		suicide = suicide,
+		time = 5.0,
+	}
+	while #server.killfeed > CDMP.KILLFEED_MAX do table.remove(server.killfeed, 1) end
+end
+
+local function tickSharedEvents(dt)
+	for i = #(server.hitEvents or {}), 1, -1 do
+		server.hitEvents[i].time = (server.hitEvents[i].time or 0) - dt
+		server.hitEvents[i].numberTime = (server.hitEvents[i].numberTime or 0) - dt
+		if server.hitEvents[i].time <= 0 and server.hitEvents[i].numberTime <= 0 then table.remove(server.hitEvents, i) end
+	end
+	for i = #(server.killfeed or {}), 1, -1 do
+		server.killfeed[i].time = (server.killfeed[i].time or 0) - dt
+		if server.killfeed[i].time <= 0 then table.remove(server.killfeed, i) end
+	end
+end
+
 local function handleHeadshots()
+	if server.state ~= "playing" then return end
 	if server.ignoreHeadshotDamage then return end
-	if (shared.multiplyheadshot or 1.0) <= 1.0 then return end
 	for i = 1, GetEventCount("playerhurt") do
 		local playerId, healthBefore, healthAfter, attackerId, point = GetEvent("playerhurt", i)
-		if isRealPlayerHit(playerId, attackerId, healthBefore, healthAfter, point) and isHeadshot(playerId, point) then
+		if isRealPlayerHit(playerId, attackerId, healthBefore, healthAfter, point) then
 			local baseDamage = (healthBefore or 0) - (healthAfter or 0)
-			local bonusDamage = getHeadshotBonusDamage(baseDamage)
-			if bonusDamage > 0 then
-				server.ignoreHeadshotDamage = true
-				ApplyPlayerDamage(playerId, bonusDamage, "headshot", attackerId)
-				server.ignoreHeadshotDamage = false
+			local headshot = (shared.multiplyheadshot or 1.0) > 1.0 and isHeadshot(playerId, point)
+			local markerDamage = baseDamage
+			if headshot then markerDamage = baseDamage * (shared.multiplyheadshot or 1.0) end
+			pushHitMarker(attackerId, "hit", markerDamage, headshot, point, playerId)
+			if headshot then
+				local bonusDamage = getHeadshotBonusDamage(baseDamage)
+				if bonusDamage > 0 then
+					server.ignoreHeadshotDamage = true
+					ApplyPlayerDamage(playerId, bonusDamage, "headshot", attackerId)
+					server.ignoreHeadshotDamage = false
+				end
 			end
 		end
 	end
 end
 
 local function handleDeaths()
+	if server.state ~= "playing" then return end
 	for i = 1, GetEventCount("playerdied") do
 		local playerId, attackerId = GetEvent("playerdied", i)
 		if server.scores[playerId] then
@@ -233,8 +328,10 @@ local function handleDeaths()
 		end
 		if attackerId ~= nil and attackerId ~= playerId and server.scores[attackerId] then
 			server.scores[attackerId].kills = (server.scores[attackerId].kills or 0) + 1
+			pushHitMarker(attackerId, "kill")
 		end
-		if server.state == "playing" then server.dead[playerId] = CDMP.RESPAWN_DELAY end
+		pushKillfeed(playerId, attackerId)
+		server.dead[playerId] = CDMP.RESPAWN_DELAY
 	end
 end
 
@@ -255,13 +352,22 @@ function CDMP_ServerInit()
 
 	server.state = "waiting"
 	server.timer = 0
+	server.countdown = 0
 	server.tools, server.toolById, server.allToolIds = CDMP.CollectToolCatalog()
 	server.players = {}
 	server.ready = {}
 	server.dead = {}
+	server.spawnCursor = 0
 	server.scores = {}
+	server.hitEvents = {}
+	server.hitSeq = 0
+	server.killfeed = {}
+	server.killfeedSeq = 0
 	server.lootSlots = {}
-	server.playerSpawns = CDMP.FindTransforms({"playerspawn", "spawn", "player"}, 12, 10.0, 3.0)
+	server.playerSpawns = {}
+	if utilLoadLevelPlayerSpawns then appendTransforms(server.playerSpawns, utilLoadLevelPlayerSpawns()) end
+	if #server.playerSpawns < 4 and utilGenerateSpawnPoints then appendTransforms(server.playerSpawns, utilGenerateSpawnPoints(16, server.playerSpawns)) end
+	if #server.playerSpawns == 0 then server.playerSpawns = CDMP.FindTransforms({"playerspawn", "spawn", "player"}, 12, 10.0, 3.0) end
 	local lootSpawns = CDMP.FindTransforms({"ammospawn", "toolspawn", "loot", "itemspawn", "spawn"}, 10, 7.0, 3.0)
 	for i = 1, #lootSpawns do table.insert(server.lootSlots, {transform = lootSpawns[i], timer = 0}) end
 	resetSettings()
@@ -278,6 +384,7 @@ function CDMP_ServerTick(dt)
 	updatePlayerList()
 	handleHeadshots()
 	handleDeaths()
+	tickSharedEvents(dt)
 	if server.state == "playing" then
 		server.timer = server.timer - dt
 		if server.timer <= 0 then
@@ -289,9 +396,14 @@ function CDMP_ServerTick(dt)
 				if delay <= 0 then spawnPlayer(playerId) else server.dead[playerId] = delay end
 			end
 		end
+	elseif server.state == "countdown" then
+		server.countdown = math.max(0, (server.countdown or 0) - dt)
+		local ids = playerIds()
+		for i = 1, #ids do stripLobbyPlayer(ids[i]) end
+		if server.countdown <= 0 then startPlaying() end
 	else
 		local ids = playerIds()
-		for i = 1, #ids do SetPlayerWalkingSpeed(0.0, ids[i]) end
+		for i = 1, #ids do stripLobbyPlayer(ids[i]) end
 	end
 	sync()
 end
@@ -305,8 +417,16 @@ function CDMP_SetLoadoutTool(playerId, toolId, enabled, ammo)
 end
 
 function CDMP_SetLootWeight(playerId, toolId, weight)
-	if not hostCanEdit(playerId) or not server.toolById[toolId] or not server.toolById[toolId].canLoot then return end
+	if not hostCanEdit(playerId) or not server.toolById[toolId] then return end
 	server.settings.lootWeights[toolId] = CDMP.Clamp(weight or 0, 0, 10)
+	sync()
+end
+
+function CDMP_SetToolOptions(playerId, toolId, canLoot, pickupAmount)
+	if not hostCanEdit(playerId) or not server.toolById[toolId] then return end
+	server.settings.toolOptions[toolId] = server.settings.toolOptions[toolId] or {canLoot = false, pickupAmount = 0}
+	server.settings.toolOptions[toolId].canLoot = canLoot == true
+	server.settings.toolOptions[toolId].pickupAmount = CDMP.Clamp(pickupAmount or 0, 0, 100)
 	sync()
 end
 
@@ -353,7 +473,7 @@ local function decodeSettingRecords(data)
 	return records
 end
 
-function CDMP_ApplySettingsAndStart(playerId, durationIdx, headshotIdx, loadoutData, lootData)
+function CDMP_ApplySettingsAndStart(playerId, durationIdx, headshotIdx, loadoutData, lootData, toolData)
 	if not IsPlayerHost(playerId) then return end
 	if server.state ~= "waiting" and server.state ~= "ended" then return end
 
@@ -375,6 +495,14 @@ function CDMP_ApplySettingsAndStart(playerId, durationIdx, headshotIdx, loadoutD
 		local toolId = record[1]
 		local weight = tonumber(record[2]) or 0
 		CDMP_SetLootWeight(playerId, toolId, weight)
+	end
+	local toolRecords = decodeSettingRecords(toolData)
+	for i = 1, #toolRecords do
+		local record = toolRecords[i]
+		local toolId = record[1]
+		local canLoot = tonumber(record[2]) == 1
+		local pickupAmount = tonumber(record[3]) or 0
+		CDMP_SetToolOptions(playerId, toolId, canLoot, pickupAmount)
 	end
 
 	CDMP_StartFromGui(playerId)

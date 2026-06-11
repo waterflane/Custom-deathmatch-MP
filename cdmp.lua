@@ -8,6 +8,10 @@
 #include "scripts/server/match.lua"
 #include "mplib/hud.lua"
 #include "scripts/client/gui.lua"
+#include "scripts/client/gui_settings.lua"
+#include "scripts/client/gui_combat.lua"
+#include "scripts/client/gui_screens.lua"
+#include "scripts/client/gui_main.lua"
 
 function server.init()
 	CDMP_ServerInit()
@@ -49,8 +53,8 @@ function server.settingsReset(playerId)
 	CDMP_ResetSettings(playerId)
 end
 
-function server.settingsApplyAndStart(playerId, durationIdx, headshotIdx, loadoutData, lootData)
-	CDMP_ApplySettingsAndStart(playerId, durationIdx, headshotIdx, loadoutData, lootData)
+function server.settingsApplyAndStart(playerId, durationIdx, headshotIdx, loadoutData, lootData, toolData)
+	CDMP_ApplySettingsAndStart(playerId, durationIdx, headshotIdx, loadoutData, lootData, toolData)
 end
 
 function client.init()

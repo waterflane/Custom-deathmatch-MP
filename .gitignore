@@ -2,6 +2,7 @@
 id.txt
 publishedfileid.txt
 *.workshop
+steam_description.txt
 
 # Logs and crash dumps
 *.log
