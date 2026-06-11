@@ -81,6 +81,19 @@ function hudAddUnstuckButton()
 	shared._hud.enableUnstuck = true
 end
 
+function hudIsSuppressedDamageEvent(victim, attacker, damage)
+	local cdmp = shared.cdmp or {}
+	local events = cdmp.suppressedDamageEvents or {}
+	for i = 1, #events do
+		local event = events[i]
+		local expectedDamage = event.damage or 0
+		if event.victim == victim and event.attacker == attacker and (math.abs(expectedDamage - (damage or 0)) <= 0.01 or ((damage or 0) > 0 and (damage or 0) <= expectedDamage + 0.01)) then
+			return true
+		end
+	end
+	return false
+end
+
 --- Process HUD-related events and health bar updates (client).
 --
 -- Handles `playerhurt` events to trigger damage indicators for the
@@ -92,7 +105,8 @@ function hudTick(dt)
 	local c = GetEventCount("playerhurt")
 	for i=1,c do
 		local victim, before, after, attacker, _point, _impulse = GetEvent("playerhurt", i)
-		if attacker ~= 0 and math.ceil((before-after)*100) > 0 then
+		local damage = (before or 0) - (after or 0)
+		if attacker ~= 0 and math.ceil(damage*100) > 0 and not hudIsSuppressedDamageEvent(victim, attacker, damage) then
 			if shared._hud.useDamageIndicators and victim == GetLocalPlayer() then
 				client._receiveDamage(attacker)
 			end

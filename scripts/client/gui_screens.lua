@@ -75,7 +75,9 @@ end
 function drawPlaying(st)
 	hudDrawTimer(st.timer, 1.0)
 	hudDrawDamageIndicators(client.cdmpDt or 0)
-	hudDrawPlayerWorldMarkers(GetAllPlayers(), true, 40.0)
+	if not st.settings or not st.settings.hud or st.settings.hud.nameplates ~= false then
+		hudDrawPlayerWorldMarkers(GetAllPlayers(), true, 40.0)
+	end
 
 	local rows = rowsFromState(st)
 	local groups = {{name = "Players", color = {0.52, 0.52, 0.52}, outline = false, rows = rows}}

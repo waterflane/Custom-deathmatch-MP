@@ -1,3 +1,5 @@
+local isKnownPlayer = nil
+
 local function resetScores()
 	server.scores = {}
 	for playerId in pairs(server.players or {}) do
@@ -6,7 +8,7 @@ local function resetScores()
 end
 
 local function resetSettings()
-	server.settings = {loadout = {}, lootWeights = {}, toolOptions = {}, durationIdx = 2, headshotIdx = 3}
+	server.settings = {loadout = {}, lootWeights = {}, toolOptions = {}, hud = {nameplates = true}, durationIdx = 2, headshotIdx = 3}
 	for i = 1, #server.tools do
 		local tool = server.tools[i]
 		server.settings.loadout[tool.id] = {enabled = tool.startEnabled, ammo = tool.ammo or 0}
@@ -31,6 +33,7 @@ local function sync()
 		countdown = server.countdown or 0,
 		dead = server.dead,
 		hitEvents = server.hitEvents,
+		suppressedDamageEvents = server.suppressedDamageEvents,
 		killfeed = server.killfeed,
 		durationOptions = CDMP.DURATION_OPTIONS,
 		headshotOptions = CDMP.HEADSHOT_OPTIONS,
@@ -58,6 +61,20 @@ local function disableAllTools(playerId)
 	end
 end
 
+local function expectedLoadoutTool(playerId)
+	local firstTool = nil
+	local currentTool = GetPlayerTool(playerId)
+	for i = 1, #server.tools do
+		local tool = server.tools[i]
+		local item = server.settings.loadout[tool.id]
+		if item and item.enabled then
+			if firstTool == nil then firstTool = tool.id end
+			if currentTool == tool.id then return currentTool end
+		end
+	end
+	return firstTool
+end
+
 local function applyLoadout(playerId)
 	disableAllTools(playerId)
 	local firstTool = nil
@@ -78,6 +95,45 @@ local function applyLoadout(playerId)
 	end
 end
 
+local function queueLoadoutVerification(playerId)
+	server.loadoutVerify[playerId] = CDMP.LOADOUT_VERIFY_TIME or 1.0
+end
+
+local function verifyLoadout(playerId, forceSelectedTool)
+	local expectedTool = expectedLoadoutTool(playerId)
+	local currentTool = GetPlayerTool(playerId)
+	for i = 1, #server.allToolIds do
+		local toolId = server.allToolIds[i]
+		local tool = server.toolById[toolId]
+		local item = server.settings.loadout[toolId]
+		local enabled = item and item.enabled == true
+		SetToolEnabled(toolId, enabled, playerId)
+		if enabled and tool and tool.usesAmmo then
+			SetToolAmmo(toolId, CDMP.Clamp(item.ammo or tool.ammo or 0, 0, 100), playerId)
+		elseif not enabled then
+			SetToolAmmo(toolId, 0, playerId)
+		end
+	end
+	if expectedTool then
+		SetPlayerSpawnTool(expectedTool, playerId)
+		if forceSelectedTool or currentTool == nil or currentTool == "" or server.toolById[currentTool] == nil or not IsToolEnabled(currentTool, playerId) then
+			SetPlayerTool(expectedTool, playerId)
+		end
+	end
+end
+
+local function tickLoadoutVerification(dt)
+	for playerId, time in pairs(server.loadoutVerify or {}) do
+		if isKnownPlayer(playerId) and server.state == "playing" and (server.dead[playerId] == nil or server.dead[playerId] <= 0) then
+			verifyLoadout(playerId, false)
+			time = time - dt
+			if time <= 0 then server.loadoutVerify[playerId] = nil else server.loadoutVerify[playerId] = time end
+		else
+			server.loadoutVerify[playerId] = nil
+		end
+	end
+end
+
 local function spawnPlayer(playerId)
 	server.spawnCursor = (server.spawnCursor or 0) + 1
 	local index = ((server.spawnCursor - 1) % #server.playerSpawns) + 1
@@ -85,6 +141,7 @@ local function spawnPlayer(playerId)
 	SetPlayerHealth(1.0, playerId)
 	SetPlayerWalkingSpeed(CDMP.DEFAULT_WALK_SPEED, playerId)
 	applyLoadout(playerId)
+	queueLoadoutVerification(playerId)
 	server.dead[playerId] = nil
 end
 
@@ -125,6 +182,7 @@ local function removePlayer(playerId)
 	server.ready[playerId] = nil
 	server.dead[playerId] = nil
 	server.scores[playerId] = nil
+	server.loadoutVerify[playerId] = nil
 end
 
 local function cleanupOfficialLoot()
@@ -195,6 +253,7 @@ local function startPlaying()
 		SetPlayerHealth(1.0, ids[i])
 		SetPlayerWalkingSpeed(CDMP.DEFAULT_WALK_SPEED, ids[i])
 		applyLoadout(ids[i])
+		queueLoadoutVerification(ids[i])
 	end
 	sync()
 end
@@ -223,8 +282,38 @@ local function endMatch()
 	sync()
 end
 
-local function isKnownPlayer(playerId)
+isKnownPlayer = function(playerId)
 	return playerId ~= nil and server.players[playerId] ~= nil
+end
+
+local function damageMatches(a, b)
+	a = a or 0
+	b = b or 0
+	return math.abs(a - b) <= 0.01 or (b > 0 and b <= a + 0.01)
+end
+
+local function pushSuppressedDamage(victimId, attackerId, damage)
+	server.suppressedDamageSeq = (server.suppressedDamageSeq or 0) + 1
+	server.suppressedDamageEvents = server.suppressedDamageEvents or {}
+	server.suppressedDamageEvents[#server.suppressedDamageEvents + 1] = {
+		seq = server.suppressedDamageSeq,
+		victim = victimId,
+		attacker = attackerId,
+		damage = damage,
+		time = CDMP.SUPPRESSED_DAMAGE_TIME or 0.35,
+	}
+	while #server.suppressedDamageEvents > 24 do table.remove(server.suppressedDamageEvents, 1) end
+end
+
+local function consumeSuppressedDamage(victimId, attackerId, damage)
+	for i = #(server.suppressedDamageEvents or {}), 1, -1 do
+		local event = server.suppressedDamageEvents[i]
+		if not event.serverConsumed and event.victim == victimId and event.attacker == attackerId and damageMatches(event.damage, damage) then
+			event.serverConsumed = true
+			return true
+		end
+	end
+	return false
 end
 
 local function isRealPlayerHit(playerId, attackerId, healthBefore, healthAfter, point)
@@ -290,6 +379,10 @@ local function tickSharedEvents(dt)
 		server.hitEvents[i].numberTime = (server.hitEvents[i].numberTime or 0) - dt
 		if server.hitEvents[i].time <= 0 and server.hitEvents[i].numberTime <= 0 then table.remove(server.hitEvents, i) end
 	end
+	for i = #(server.suppressedDamageEvents or {}), 1, -1 do
+		server.suppressedDamageEvents[i].time = (server.suppressedDamageEvents[i].time or 0) - dt
+		if server.suppressedDamageEvents[i].time <= 0 then table.remove(server.suppressedDamageEvents, i) end
+	end
 	for i = #(server.killfeed or {}), 1, -1 do
 		server.killfeed[i].time = (server.killfeed[i].time or 0) - dt
 		if server.killfeed[i].time <= 0 then table.remove(server.killfeed, i) end
@@ -303,16 +396,19 @@ local function handleHeadshots()
 		local playerId, healthBefore, healthAfter, attackerId, point = GetEvent("playerhurt", i)
 		if isRealPlayerHit(playerId, attackerId, healthBefore, healthAfter, point) then
 			local baseDamage = (healthBefore or 0) - (healthAfter or 0)
-			local headshot = (shared.multiplyheadshot or 1.0) > 1.0 and isHeadshot(playerId, point)
-			local markerDamage = baseDamage
-			if headshot then markerDamage = baseDamage * (shared.multiplyheadshot or 1.0) end
-			pushHitMarker(attackerId, "hit", markerDamage, headshot, point, playerId)
-			if headshot then
-				local bonusDamage = getHeadshotBonusDamage(baseDamage)
-				if bonusDamage > 0 then
-					server.ignoreHeadshotDamage = true
-					ApplyPlayerDamage(playerId, bonusDamage, "headshot", attackerId)
-					server.ignoreHeadshotDamage = false
+			if not consumeSuppressedDamage(playerId, attackerId, baseDamage) then
+				local headshot = (shared.multiplyheadshot or 1.0) > 1.0 and isHeadshot(playerId, point)
+				local markerDamage = baseDamage
+				if headshot then markerDamage = baseDamage * (shared.multiplyheadshot or 1.0) end
+				pushHitMarker(attackerId, "hit", markerDamage, headshot, point, playerId)
+				if headshot then
+					local bonusDamage = getHeadshotBonusDamage(baseDamage)
+					if bonusDamage > 0 then
+						pushSuppressedDamage(playerId, attackerId, bonusDamage)
+						server.ignoreHeadshotDamage = true
+						ApplyPlayerDamage(playerId, bonusDamage, "headshot", attackerId)
+						server.ignoreHeadshotDamage = false
+					end
 				end
 			end
 		end
@@ -361,6 +457,9 @@ function CDMP_ServerInit()
 	server.scores = {}
 	server.hitEvents = {}
 	server.hitSeq = 0
+	server.suppressedDamageEvents = {}
+	server.suppressedDamageSeq = 0
+	server.loadoutVerify = {}
 	server.killfeed = {}
 	server.killfeedSeq = 0
 	server.lootSlots = {}
@@ -391,6 +490,7 @@ function CDMP_ServerTick(dt)
 			endMatch()
 		else
 			if toolsTick then toolsTick(dt) end
+			tickLoadoutVerification(dt)
 			for playerId, delay in pairs(server.dead) do
 				delay = delay - dt
 				if delay <= 0 then spawnPlayer(playerId) else server.dead[playerId] = delay end
@@ -427,6 +527,13 @@ function CDMP_SetToolOptions(playerId, toolId, canLoot, pickupAmount)
 	server.settings.toolOptions[toolId] = server.settings.toolOptions[toolId] or {canLoot = false, pickupAmount = 0}
 	server.settings.toolOptions[toolId].canLoot = canLoot == true
 	server.settings.toolOptions[toolId].pickupAmount = CDMP.Clamp(pickupAmount or 0, 0, 100)
+	sync()
+end
+
+function CDMP_SetHudOptions(playerId, nameplates)
+	if not hostCanEdit(playerId) then return end
+	server.settings.hud = server.settings.hud or {}
+	server.settings.hud.nameplates = nameplates == true
 	sync()
 end
 
@@ -473,7 +580,7 @@ local function decodeSettingRecords(data)
 	return records
 end
 
-function CDMP_ApplySettingsAndStart(playerId, durationIdx, headshotIdx, loadoutData, lootData, toolData)
+function CDMP_ApplySettingsAndStart(playerId, durationIdx, headshotIdx, loadoutData, lootData, toolData, hudData)
 	if not IsPlayerHost(playerId) then return end
 	if server.state ~= "waiting" and server.state ~= "ended" then return end
 
@@ -503,6 +610,14 @@ function CDMP_ApplySettingsAndStart(playerId, durationIdx, headshotIdx, loadoutD
 		local canLoot = tonumber(record[2]) == 1
 		local pickupAmount = tonumber(record[3]) or 0
 		CDMP_SetToolOptions(playerId, toolId, canLoot, pickupAmount)
+	end
+
+	local hudRecords = decodeSettingRecords(hudData)
+	for i = 1, #hudRecords do
+		local record = hudRecords[i]
+		if record[1] == "nameplates" then
+			CDMP_SetHudOptions(playerId, tonumber(record[2]) == 1)
+		end
 	end
 
 	CDMP_StartFromGui(playerId)

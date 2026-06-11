@@ -74,8 +74,15 @@ function makeMatchItems(st)
 	}
 end
 
-function makeHudItems()
+function getHudSettings(st)
+	local settings = st.settings or {}
+	return settings.hud or {nameplates = true}
+end
+
+function makeHudItems(st)
+	local hudSettings = getHudSettings(st or {})
 	return {
+		{key = key("hud.nameplates"), label = "Player names", info = "Show player names above heads for everyone", options = onOffOptions(), default = hudSettings.nameplates ~= false and 1 or 0},
 		{key = key("hud.hitMarker"), label = "Hit marker", info = "Show feedback when you hit a player", options = onOffOptions(), default = 1},
 		{key = key("hud.killMarker"), label = "Kill marker", info = "Show separate feedback when you kill a player", options = onOffOptions(), default = 1},
 		{key = key("hud.damageNumbers"), label = "Damage numbers", info = "Show floating damage numbers near the crosshair", options = onOffOptions(), default = 1},
@@ -99,7 +106,7 @@ function makeToolItems(st, tool)
 end
 
 function initializeAllSettings(st)
-	local groups = {makeMatchItems(st), makeHudItems()}
+	local groups = {makeMatchItems(st), makeHudItems(st)}
 	local tools = st.tools or {}
 	for i = 1, #tools do groups[#groups + 1] = makeToolItems(st, tools[i]) end
 	for i = 1, #groups do
@@ -159,10 +166,16 @@ function encodeToolOptions(st)
 	return table.concat(parts, ";")
 end
 
+function encodeHudSettings(st)
+	local hudSettings = getHudSettings(st)
+	local nameplates = readNumber(key("hud.nameplates"), hudSettings.nameplates ~= false and 1 or 0)
+	return "nameplates:" .. tostring(CDMP.Clamp(nameplates, 0, 1))
+end
+
 function applySettingsAndStart(st)
 	local durationIdx = readNumber(key("match.time"), (st.settings and st.settings.durationIdx) or 2)
 	local headshotIdx = readNumber(key("match.headshot"), (st.settings and st.settings.headshotIdx) or 3)
-	ServerCall("server.settingsApplyAndStart", GetLocalPlayer(), durationIdx, headshotIdx, encodeLoadoutSettings(st), encodeLootSettings(st), encodeToolOptions(st))
+	ServerCall("server.settingsApplyAndStart", GetLocalPlayer(), durationIdx, headshotIdx, encodeLoadoutSettings(st), encodeLootSettings(st), encodeToolOptions(st), encodeHudSettings(st))
 end
 
 function drawSectionButton(label, width, active)
@@ -263,7 +276,7 @@ function drawSettingsPanel(st)
 		pageCount = 1
 		drawStepperList(items, 1, #items, contentWidth, rowHeight)
 	elseif section == 3 then
-		local items = makeHudItems()
+		local items = makeHudItems(st)
 		pageCount = 1
 		drawStepperList(items, 1, #items, contentWidth, rowHeight)
 	elseif client.cdmpSelectedToolIndex then
@@ -329,7 +342,7 @@ function drawSettingsPanel(st)
 			end
 		end
 	elseif section == 3 then
-		resetItemsList = makeHudItems()
+		resetItemsList = makeHudItems(st)
 	end
 	UiPush()
 	UiTranslate(-(buttonWidth + 20) / 2, 0)

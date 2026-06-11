@@ -53,8 +53,8 @@ function server.settingsReset(playerId)
 	CDMP_ResetSettings(playerId)
 end
 
-function server.settingsApplyAndStart(playerId, durationIdx, headshotIdx, loadoutData, lootData, toolData)
-	CDMP_ApplySettingsAndStart(playerId, durationIdx, headshotIdx, loadoutData, lootData, toolData)
+function server.settingsApplyAndStart(playerId, durationIdx, headshotIdx, loadoutData, lootData, toolData, hudData)
+	CDMP_ApplySettingsAndStart(playerId, durationIdx, headshotIdx, loadoutData, lootData, toolData, hudData)
 end
 
 function client.init()
