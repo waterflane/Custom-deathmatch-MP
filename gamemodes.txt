@@ -6,4 +6,4 @@ description = Configurable multiplayer deathmatch with headshot damage, match ti
 en_description = Configurable multiplayer deathmatch with headshot damage, match time, starting items, and weighted loot spawns.
 ru_description = Configurable multiplayer deathmatch with headshot damage, match time, starting items, and weighted loot spawns.
 path = cdmp.lua
-preview = preview.jpg
+preview = td_icon.jpg
